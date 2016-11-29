@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.Date;
 
 import kelgon.rosalite.base.Mongo;
 
@@ -62,7 +63,7 @@ public class LogTrackerThread extends Thread {
 							line = new String(line.getBytes("ISO-8859-1"), "UTF-8");
 							pos = logfile.getFilePointer();
 							lastModified = file.lastModified();
-							log.trace("已读取：" + line);
+							log.trace("fetched 1 line.");
 						}
 					} catch (IOException e) {
 						log.error("", e);
@@ -80,7 +81,8 @@ public class LogTrackerThread extends Thread {
 		} finally {
 			log.info("reading stopped, sync status to central...");
 			Mongo.db().getCollection("trackers").updateOne(new Document("_id", setting.getObjectId("_id")), 
-					new Document("$set", new Document("status", "stopped").append("pos", pos)));
+					new Document("$set", new Document("status", "stopped").append("pos", pos)
+							.append("lastModified", lastModified).append("lastHeartbeat", new Date())));
 		}
 	}
 	
