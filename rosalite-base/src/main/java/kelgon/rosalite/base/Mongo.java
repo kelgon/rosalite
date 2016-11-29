@@ -57,10 +57,10 @@ public class Mongo {
 				log.error("rosalite.dbname must not be null or empty!");
 				return false;
 			}
-			String recordCredentials = props.getProperty("rosalite.recordCredentials");
+			String dbCredentials = props.getProperty("rosalite.dbCredentials");
 			List<MongoCredential> mCreList = new ArrayList<MongoCredential>();
-			if(!"".equals(recordCredentials) && recordCredentials != null) {
-				String[] cre = recordCredentials.split(":");
+			if(!"".equals(dbCredentials) && dbCredentials != null) {
+				String[] cre = dbCredentials.split(":");
 				MongoCredential credential = MongoCredential.createScramSha1Credential(cre[0], dbName, cre[1].toCharArray());
 				mCreList.add(credential);
 			}
