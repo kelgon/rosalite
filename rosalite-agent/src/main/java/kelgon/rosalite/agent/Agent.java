@@ -1,10 +1,12 @@
 package kelgon.rosalite.agent;
 
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bson.Document;
+import org.quartz.Scheduler;
 
 public class Agent {
 	public static Document settings;
-	public static Set<LogTrackerThread> trackers;
+	public static ConcurrentHashMap<String, LogTrackerThread> trackers;
+	public static Scheduler sched;
 }

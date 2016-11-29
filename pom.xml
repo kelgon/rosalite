@@ -48,5 +48,6 @@
   <modules>
   	<module>rosalite-base</module>
     <module>rosalite-agent</module>
+    <module>rosalite-console</module>
   </modules>
 </project>

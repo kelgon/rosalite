@@ -3,9 +3,9 @@ package kelgon.rosalite.agent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 import kelgon.rosalite.base.CommonUtils;
 import kelgon.rosalite.base.Mongo;
@@ -14,6 +14,14 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 import org.bson.Document;
+import org.quartz.CronScheduleBuilder;
+import org.quartz.CronTrigger;
+import org.quartz.JobBuilder;
+import org.quartz.JobDetail;
+import org.quartz.SchedulerException;
+import org.quartz.SchedulerFactory;
+import org.quartz.TriggerBuilder;
+import org.quartz.impl.StdSchedulerFactory;
 
 import com.mongodb.client.MongoCursor;
 
@@ -56,7 +64,7 @@ public class AgentRunner {
 			}
 			//find and verify tracker setting of this agent from MongoDB
 			MongoCursor<Document> cursor = Mongo.db().getCollection("trackers").find(new Document("agent",
-					agent.getObjectId("_id"))).iterator();
+					agent.getObjectId("_id")).append("autorun", true)).iterator();
 			if(!cursor.hasNext()) {
 				log.error("cannot find any tracker config under agent ["+agentName+"]");
 				return false;
@@ -71,6 +79,17 @@ public class AgentRunner {
 					return false;
 			}
 			Agent.settings.append("trackers", trackers);
+			
+			log.info("init courier job...");
+		    SchedulerFactory sf = new StdSchedulerFactory();
+		    Agent.sched = sf.getScheduler();
+		    JobDetail courierJob = JobBuilder.newJob(Courier.class).withIdentity("CourierJob", "group1").build();
+		    CronTrigger courierTrigger = (CronTrigger)TriggerBuilder.newTrigger()
+		    		.withIdentity("CourierTrigger", "group1")
+		    		.withSchedule(CronScheduleBuilder.cronSchedule("0/10 * * * * ?")).build();
+		    Agent.sched.scheduleJob(courierJob, courierTrigger);
+		    
+		    
 			Mongo.db().getCollection("agents").updateOne(new Document("_id", Agent.settings.getObjectId("_id")), 
 					new Document("$set", new Document("status", "running").append("pid", CommonUtils.getPid())));
 			log.info("agent "+agentName+" successfully initialized");
@@ -104,15 +123,22 @@ public class AgentRunner {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private static void startAgents() {
+	private static boolean startAgents() {
 		List<Document> trackers = (List<Document>)Agent.settings.get("trackers");
 		log.info("starting "+trackers.size()+" tracker threads...");
-		Agent.trackers = new HashSet<LogTrackerThread>();
+		Agent.trackers = new ConcurrentHashMap<String, LogTrackerThread>();
 		for(Document setting : trackers) {
 			LogTrackerThread lt = new LogTrackerThread(setting);
 			lt.start();
-			Agent.trackers.add(lt);
+			Agent.trackers.put(setting.getString("no"), lt);
 		}
+		try {
+			Agent.sched.start();
+		} catch (SchedulerException e) {
+			log.error("error starting courier", e);
+			return false;
+		}
+		return true;
 	}
 	
 	public static void main(String[] args) {
@@ -122,9 +148,12 @@ public class AgentRunner {
 			log.info("initializing agent settings...");
 			if(initAgent()) {
 				log.info("starting agent threads...");
-				startAgents();
-				Runtime.getRuntime().addShutdownHook(new ShutdownCleaner());
-				return;
+				if(startAgents()) {
+					log.info("addShutdownHook...");
+					Runtime.getRuntime().addShutdownHook(new ShutdownCleaner());
+					log.info("rosalite-agent started");
+					return;
+				}
 			}
 		}
 		log.error("failed to start rosalite-agent");
